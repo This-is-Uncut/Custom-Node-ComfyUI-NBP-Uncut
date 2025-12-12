@@ -16,9 +16,9 @@ Git clone the repository into your comfyUI/custom_nodes folder
 
 If you get error message when starting comfy, or not getting high resolution output, try to:
 from inside the cloned folder with venv activated:
-pip install -r requirements.txt
+"pip install -r requirements.txt"
 or specifically: 
-pip install --upgrade google-genai 
+"pip install --upgrade google-genai" 
 start/restart ComfyUI server.
 
 # Use
