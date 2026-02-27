@@ -151,12 +151,51 @@ class NanoBananaProNode:
                         aspect_ratio=aspect_ratio,
                         image_size=resolution 
                     ),
-                    seed=seed % 2147483647 
+                    seed=seed % 2147483647,
+                    safety_settings=[
+                        types.SafetySetting(
+                            category="HARM_CATEGORY_HATE_SPEECH",
+                            threshold="BLOCK_NONE"
+                        ),
+                        types.SafetySetting(
+                            category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                            threshold="BLOCK_NONE"
+                        ),
+                        types.SafetySetting(
+                            category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                            threshold="BLOCK_NONE"
+                        ),
+                        types.SafetySetting(
+                            category="HARM_CATEGORY_HARASSMENT",
+                            threshold="BLOCK_NONE"
+                        ),
+                    ]
                 )
             )
 
+            # --- Check for Blocked Response ---
+            blocked_reason = None
+            if hasattr(response, "prompt_feedback") and response.prompt_feedback:
+                pf = response.prompt_feedback
+                if pf.block_reason:
+                    blocked_reason = str(pf.block_reason)
+                    print(f"\n!!! BLOCKED: Prompt Block Reason: {blocked_reason} !!!")
+                    # Some versions might have a message
+                    if hasattr(pf, "block_reason_message"):
+                        print(f"Block Message: {pf.block_reason_message}")
+            
+            if hasattr(response, "candidates") and response.candidates:
+                for i, cand in enumerate(response.candidates):
+                    if cand.finish_reason and cand.finish_reason not in ["STOP", "MAX_TOKENS"]:
+                         reason = str(cand.finish_reason)
+                         print(f"\n!!! Candidate {i} Blocked/Finished Early: {reason} !!!")
+                         if hasattr(cand, "safety_ratings"):
+                             print(f"Safety Ratings: {cand.safety_ratings}")
+                         if not blocked_reason:
+                             blocked_reason = reason
+
             # 7. Process Output
-            if hasattr(response, "parts"):
+            if hasattr(response, "parts") and response.parts:
                 for part in response.parts:
                     if part.text:
                         print(f"Gemini Reasoning: {part.text[:200]}...")
@@ -176,12 +215,18 @@ class NanoBananaProNode:
             
             # Fallback for alternative structure
             elif hasattr(response, "candidates") and response.candidates:
-                 for part in response.candidates[0].content.parts:
-                    if part.text: print(f"Reasoning: {part.text[:100]}")
-                    if part.inline_data:
-                        d = part.inline_data.data
-                        img_bytes = base64.b64decode(d) if isinstance(d, str) else d
-                        return (pil_to_comfy_tensor(Image.open(io.BytesIO(img_bytes))),)
+                 # Safe access to parts
+                 cand = response.candidates[0]
+                 if hasattr(cand, "content") and cand.content and hasattr(cand.content, "parts") and cand.content.parts:
+                     for part in cand.content.parts:
+                        if part.text: print(f"Reasoning: {part.text[:100]}")
+                        if part.inline_data:
+                            d = part.inline_data.data
+                            img_bytes = base64.b64decode(d) if isinstance(d, str) else d
+                            return (pil_to_comfy_tensor(Image.open(io.BytesIO(img_bytes))),)
+
+            if blocked_reason:
+                raise Exception(f"The generation was blocked. Reason: {blocked_reason} !!!")
 
             raise Exception("Model returned success but no image was found in the response.")
 
